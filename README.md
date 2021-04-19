@@ -7,7 +7,7 @@ User can upload their models and the images. This app will take model and test o
 2. clone this repo
 3. Go to dir local-model-test-app/local-server - run npm install
 4. To start server - npm start
-5. To access - <IP addr>:8083
+5. To access - IP addr:8083
 
 ### Fields to be filled in
 1. Give a name to your model - Any name of your model
