@@ -1,0 +1,369 @@
+<html>
+
+<head>
+  <title>Testing App</title>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+
+  <style>
+    table {
+      /* border-collapse: collapse; */
+      width: 100%;
+    }
+
+    th,
+    td {
+      text-align: center;
+      padding: 8px;
+    }
+
+    th {
+      /* border-radius: 8px; */
+      background-color: #4CAF50;
+      color: white;
+    }
+
+
+
+    select {
+      flex: 1;
+      border-radius: 8px;
+      vertical-align: middle;
+      padding: 10px;
+      background-color: #fff;
+      border: 1px solid #ddd;
+    }
+
+    input[type="text"] {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      background-color: #fff;
+    }
+
+    form {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 10px;
+      background-color: #ddd;
+    }
+
+    input[type="file"] {
+      border-radius: 8px;
+
+      padding: 10px;
+      background-color: #fff;
+    }
+
+
+    input[type="submit"],
+    button {
+      border-radius: 8px;
+      padding: 10px 20px;
+      background-color: dodgerblue;
+      border: 1px solid #ddd;
+      color: white;
+      cursor: pointer;
+    }
+
+
+    button:disabled,
+    button[disabled] {
+      border: 1px solid #999999;
+      background-color: #cccccc;
+      color: #666666;
+    }
+
+    button:active,
+    button:focus,
+    button:focus-visible {
+
+      background-color: #000000;
+    }
+
+    #summary {
+      font-size: 20px;
+      font-weight: bold;
+      color: red
+    }
+
+    #averageTime {
+      font-size: 20px;
+      font-weight: bold;
+      color: darkgreen
+    }
+
+    progress {
+      width: 100%;
+      height: 30px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <form action="file_upload" method="POST" enctype="multipart/form-data">
+    <label for="name">Give a name to your model</label>
+    <input type="text" required name="name" placeholder="Type here..." />
+    <label for="files">Model Weights</label>
+    <input type="file" required name="files" multiple />
+
+    <label for="files">Model Algorithm</label>
+    <input type="file" required name="files" multiple />
+
+    <input type="submit" value="Upload Model" />
+    <br />
+    <p>Your model will be listed below</p>
+  </form>
+  <label for="image-picker">Select image(s) to test</label>
+
+  <input name="image-picker" id="image-picker" type="file" accept="image/*" multiple />
+  <select id="models"></select>
+
+  <button id="run">Run Prediction</button>
+  <button id="runOnCannedDataset">Run Prediction (Canned Dataset)</button>
+  <button id="stop" style="background-color: red;">Stop</button>
+
+  <div id="message"></div>
+
+  <progress id="progress" value="0" max="100"></progress>
+  <div id="summary">
+  </div>
+  <div id="averageTime">
+  </div>
+
+</body>
+<script type="module">
+  window.ROOT_DIR = "."
+  $("#image-picker").change(function (event) {
+    canned = false
+    readURL(this);
+  });
+  var CUSTOM_TEST_IMG = [];
+  var stop = false;
+  $("#stop").click(() => {
+    stop = true;
+  })
+  function readURL(input) {
+    if (input.files) {
+      CUSTOM_TEST_IMG = [];
+      readmultifiles(input.files)
+    }
+  }
+  function readmultifiles(files) {
+
+    var reader = new FileReader();
+
+    function readFile(index) {
+      if (index >= files.length) {
+        return;
+      };
+      var file = files[index];
+      reader.onload = function (e) {
+
+        CUSTOM_TEST_IMG.push({
+          "label": file.name,
+          "url_src": e.target.result
+        });
+
+
+        readFile(index + 1)
+      }
+
+      reader.readAsDataURL(file);
+    }
+    readFile(0);
+  }
+  $.get("/files", function (data, status) {
+    console.log(status);
+    if (status === "success") {
+      for (let x of data) {
+        $('#models').append(`<option value="${x}"> ${x} </option>`);
+
+      }
+    }
+
+  })
+  var selected_model;
+  $('#models').on('click', async function () {
+    selected_model = $(this).val();
+  });
+  var canned = false
+  $('#runOnCannedDataset').on('click', async function () {
+    canned = true
+    $("#run").click()
+  })
+  $('#run').on('click', async function () {
+    stop = false
+    try {
+
+      $("#message").html("Please wait...")
+      progress.value = 0;
+      let remoteFile = (await import("/" + selected_model + "/Model.js"));
+      let Model = remoteFile.default;
+      let x = new Model();
+      let total_time = 0,
+        true_pred = 0,
+        total_pred = 0,
+        false_pred = 0,
+        no_pred = 0;
+      let data = {
+        "image": CUSTOM_TEST_IMG
+      }
+      if (canned) {
+        data = TEST_DATA
+      }
+      var resultList = [];
+
+      for (let index = 0; index < data.image.length; index++) {
+        if (stop) {
+          break;
+        }
+        let startTime = performance.now()
+
+        let result = await x.predict(data.image[index].url_src, "/" + selected_model + "/model.json")
+        total_time += result.time_taken;
+        let category = "";
+        if (result.site.replace(/\s+/g, "").toLowerCase().includes(data.image[index].label.replace(/\s+/g, "").toLowerCase()) || data.image[index].label.replace(/\s+/g, "").toLowerCase().includes(result.site.replace(/\s+/g, "").toLowerCase())) {
+          category = "true";
+          true_pred++;
+        } else if (result.site == "NaN") {
+          result.site = "Not Predicted"
+          result.confidence = 0
+          category = "no";
+          no_pred++;
+        } else {
+          category = "false";
+          false_pred++;
+
+        }
+        result.confidence = result.confidence.toFixed(2)
+        result.time_taken = result.time_taken.toFixed(2)
+
+        resultList.unshift({
+          category: category,
+          label: data.image[index].label,
+          result: result
+        });
+        total_pred++;
+        progress.value = total_pred * 100 / data.image.length;
+        displayResultList(resultList);
+      }
+
+      let average_time = total_time / total_pred;
+      let score = (true_pred / total_pred) * 100;
+      reportAverageTime(total_time.toFixed(2), average_time.toFixed(2), score.toFixed(2));
+      showSummary(true_pred, false_pred, no_pred, total_pred);
+      $("#message").html("")
+    } catch (e) {
+      $("#message").html("Please select a model to run : " + e)
+
+    }
+    canned = false
+  });
+  async function displayResult(label_, result, cat) {
+    let tr = document.createElement("tr");
+    if (cat === "true") {
+      tr.style.backgroundColor = "lightgreen";
+    } else if (cat === "false") {
+      tr.style.backgroundColor = "lightpink";
+
+    } else {
+      // tr.style.backgroundColor = "lightblue";
+
+    }
+    let label = document.createElement("td");
+    let prediction = document.createElement("td");
+    let confidence = document.createElement("td");
+    let time_taken = document.createElement("td");
+    let image = document.createElement("td");
+
+    tr.appendChild(label);
+    tr.appendChild(prediction);
+    tr.appendChild(confidence);
+    tr.appendChild(time_taken);
+    tr.appendChild(image);
+
+    label.innerHTML = label_;
+    prediction.innerHTML = result.site;
+    confidence.innerHTML = result.confidence + "%";
+    time_taken.innerHTML = result.time_taken + " sec";
+
+    var img = document.createElement("img");
+    img.src = result.image;
+    img.style.width = "500px";
+    image.appendChild(img);
+
+    document.getElementsByTagName("table")[0].appendChild(tr);
+  }
+  var progress = document.getElementById("progress");
+
+  function displayResultList(list) {
+    let t = document.getElementsByTagName("table");
+    if (t === undefined || t.length === 0) {
+
+    } else {
+      t[0].remove();
+    }
+    let table = document.createElement("table");
+    let tr = document.createElement("tr");
+    let label = document.createElement("th");
+    let prediction = document.createElement("th");
+    let confidence = document.createElement("th");
+    let time_taken = document.createElement("th");
+    let image = document.createElement("th");
+
+    tr.appendChild(label);
+    tr.appendChild(prediction);
+    tr.appendChild(confidence);
+    tr.appendChild(time_taken);
+    tr.appendChild(image);
+    table.appendChild(tr);
+    label.innerHTML = "label";
+    prediction.innerHTML = "Prediction";
+    confidence.innerHTML = "Confidence";
+    time_taken.innerHTML = "Time taken";
+    image.innerHTML = "Image";
+
+    document.body.appendChild(table);
+    for (let r of list) {
+      displayResult(r.label, r.result, r.category);
+    }
+
+  }
+  async function reportAverageTime(total_time, average_time, score) {
+
+    document.getElementById("averageTime").innerHTML = "Total Prediction time: " + total_time + " sec," + " Average Prediction time: " + average_time + " sec";
+
+  }
+  async function showSummary(true_pred, false_pred, no_pred, total_pred) {
+
+    document.getElementById("summary").innerHTML = "<p id='finalresult'> True:" + true_pred + ", False:" + false_pred + ", No Prediction:" + no_pred + ", Total:" + total_pred + "</p>";
+
+  }
+  var TEST_DATA;
+  var shouldUpdate = false;
+  if (+new Date() - (localStorage.getItem("lastUpdate")) > (24 * 60 * 60 * 1000)) {
+    console.log("updating.......");
+    localStorage.setItem("lastUpdate", +new Date());
+    shouldUpdate = true
+  }
+  loadTestDataFrom('/testData')
+  async function loadTestDataFrom(URL) {
+    if (!shouldUpdate && localStorage.getItem("test_data")) {
+      console.log("test data from cache");
+      TEST_DATA = JSON.parse(localStorage.getItem("test_data"))
+      return
+    }
+    console.log("test data from remote");
+
+    let response = await fetch(URL);
+    let data = await response.json();
+    TEST_DATA = data;
+    localStorage.setItem("test_data", JSON.stringify(TEST_DATA))
+
+    return;
+  }
+</script>
+
+</html>
