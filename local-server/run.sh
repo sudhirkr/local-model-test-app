@@ -3,4 +3,4 @@
 # main file is server.js
 # models are saved under models directory
 
-node server.js
+nohup node server.js &

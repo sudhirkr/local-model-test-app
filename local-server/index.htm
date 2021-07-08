@@ -4,6 +4,8 @@
   <title>Testing App</title>
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.3.2/jspdf.min.js"></script>
+  <script src="https://unpkg.com/jspdf-autotable"></script>
 
   <style>
     table {
@@ -127,9 +129,13 @@
   <div id="message"></div>
 
   <progress id="progress" value="0" max="100"></progress>
-  <div id="summary">
-  </div>
-  <div id="averageTime">
+  <div id='reportContent'>
+    <br>
+    <button onclick="demoFromHTML();" id="pdfBtn" style="display: none; width: 20vw">Generate PDF Report</button>
+    <div id="summary">
+    </div>
+    <div id="averageTime">
+    </div>
   </div>
 
 </body>
@@ -306,6 +312,7 @@
       t[0].remove();
     }
     let table = document.createElement("table");
+    table.id = 'summaryTable'
     let tr = document.createElement("tr");
     let label = document.createElement("th");
     let prediction = document.createElement("th");
@@ -319,7 +326,7 @@
     tr.appendChild(time_taken);
     tr.appendChild(image);
     table.appendChild(tr);
-    label.innerHTML = "label";
+    label.innerHTML = "Label";
     prediction.innerHTML = "Prediction";
     confidence.innerHTML = "Confidence";
     time_taken.innerHTML = "Time taken";
@@ -339,6 +346,7 @@
   async function showSummary(true_pred, false_pred, no_pred, total_pred) {
 
     document.getElementById("summary").innerHTML = "<p id='finalresult'> True:" + true_pred + ", False:" + false_pred + ", No Prediction:" + no_pred + ", Total:" + total_pred + "</p>";
+    document.getElementById('pdfBtn').style.display = 'block'
 
   }
   var TEST_DATA;
@@ -364,6 +372,58 @@
 
     return;
   }
+</script>
+
+<script>
+    function demoFromHTML() {
+        var pdf = new jsPDF('p', 'pt', 'letter');
+        source = $('#reportContent')[0];
+        margins = {
+            top: 80,
+            bottom: 60,
+            left: 40,
+            width: 522
+        };
+
+       pdf.autoTable({
+          html: '#summaryTable',
+          bodyStyles: {minCellHeight: 60},
+          styles: {minCellHeight: 40},
+          didDrawCell: function(data) {
+
+            if(data.row.index == 0){
+
+            }
+
+            if (data.column.index === 4 && data.row.index > 0) {
+              var td = data.cell.raw;
+              var img = td.getElementsByTagName('img')[0];
+              var dim = data.cell.height - data.cell.padding('vertical');
+              var textPos = data.cell.textPos;
+              var netHeight = data.cell.height - data.cell.padding('vertical');
+              var y = (data.cell.y + netHeight / 2 + data.cell.padding('top')-25);
+              var x =  data.cell.x + data.cell.padding('left');
+              pdf.addImage(img.src, x, y, dim, dim);
+            }
+          }
+      });
+
+      let finalY = pdf.autoTable.previous.finalY
+      var name = prompt('Give a name to your report:');
+      pdf.fromHTML(
+          source, // HTML string or DOM elem ref.
+          margins.left, // x coord
+          finalY, { // y coord
+              'width': margins.width, // max width of content on PDF
+          },
+      
+          function (dispose) {
+              // dispose: object with X, Y of the last line add to the PDF 
+              //          this allow the insertion of new lines after html
+              pdf.save(name);
+          }, margins
+      );
+    }
 </script>
 
 </html>
